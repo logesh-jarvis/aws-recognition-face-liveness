@@ -2,7 +2,9 @@ import { Component, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
 import { LivenessService } from './liveness.service';
 import * as AWS from 'aws-sdk';
 import { FaceLivenessReactWrapperComponent } from 'src/FaceLivenessReactWrapperComponent';
-import awsmobile from 'src/aws-exports';
+import * as CryptoJS from 'crypto-js';
+import { firstValueFrom } from 'rxjs';
+import { DataService } from '../service';
 
 @Component({
   selector: 'app-face-liveness',
@@ -23,33 +25,62 @@ export class FaceLivenessComponent implements OnInit {
 
   @ViewChild('faceliveness', { static: false }) faceliveness: FaceLivenessReactWrapperComponent;
 
-  constructor(private faceLivenessService: LivenessService) {
+  constructor(private faceLivenessService: LivenessService, private dataService: DataService) {
 
   }
 
   ngOnInit(): void {
-    this.faceLivenessService.liveness_session.subscribe(([status, data]) => {
-      if (status == 'success') {
-        this.initate_liveness_session(data);
-      }
-    })
+    this.initiate();
+  }
 
-    AWS.config.region = awsmobile['aws_project_region'];
-    const cognito_endpoint = `cognito-idp.${awsmobile['aws_project_region']}.amazonaws.com/${awsmobile['aws_user_pools_id']}`
-    // Initialize the Amazon Cognito credentials provider
-    const session = this.faceLivenessService.get_current_session().then(data => {
-      AWS.config.credentials = new AWS.CognitoIdentityCredentials({
-        IdentityPoolId: awsmobile['aws_cognito_identity_pool_id'],
-        Logins: {
-          [cognito_endpoint]: data.getIdToken().getJwtToken()
+  public async initiate() {
+    try {
+      const jwt = this.getJwtFromLocalStorage();
+      const token = await this.getDecryptedToken(jwt.user_id);
+      await this.configureAWS(token);
+      this.dataService.createLivenessSession().subscribe(async (res: any) => {
+        console.log('sessionCreated')
+        this.session_id = res.SessionId;
+        this.initate_liveness_session({});
+      });
+    } catch (error) {
+      console.error('Error during initiation:', error);
+    }
+  }
+
+  private async getDecryptedToken(userId: string): Promise<any> {
+    const encryptedToken = await firstValueFrom(this.dataService.getToken());
+    const decryptedData = CryptoJS.AES.decrypt(JSON.parse(encryptedToken).data, userId).toString(CryptoJS.enc.Utf8);
+    return JSON.parse(decryptedData);
+  }
+
+  private async configureAWS(token: any): Promise<void> {
+    AWS.config.correctClockSkew = true;
+    AWS.config.region = 'us-east-1';
+    console.log(token.c.IdentityPoolId);
+    AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+      IdentityPoolId: token.c.IdentityPoolId,
+      IdentityId: token.c.IdentityId,
+      Logins: {
+        'cognito-identity.amazonaws.com': token.c.Token,
+      },
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      AWS.config.getCredentials((err: any) => {
+        if (err) {
+          console.error('Error obtaining AWS credentials:', err);
+          reject(err);
+        } else {
+          console.log('AWS credentials obtained successfully');
+          resolve();
         }
       });
+    });
+  }
 
-      this.get_liveness_session()
-    }).catch(err => {
-      console.log(err)
-    }
-    );
+  private getJwtFromLocalStorage(): any {
+    return JSON.parse(localStorage.getItem('token') ?? '{}');
   }
 
   public handleErrors(err: any) {
@@ -78,12 +109,12 @@ export class FaceLivenessComponent implements OnInit {
 
   initate_liveness_session(data: {}) {
     this.is_live = false;
-    this.session_id = data['SessionId'];
     this.confidence = 0;
     this.liveness_session_complete = false;
     setTimeout(() => {
+      console.log("UI Initiating")
       this.start_liveness_session = true;
-    }, 3);
+    }, 4);
   }
 
   get_liveness_session() {

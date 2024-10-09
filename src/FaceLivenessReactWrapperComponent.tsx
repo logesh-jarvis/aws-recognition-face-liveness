@@ -12,11 +12,10 @@ import {
     ViewChild,
     ViewEncapsulation
 } from '@angular/core';
-import * as React from 'react';
-import * as ReactDOM from 'react-dom';
 import { FaceLivenessDetector } from '@aws-amplify/ui-react-liveness';
 import * as AWS from 'aws-sdk';
-import awsmobile from './aws-exports';
+import * as React from 'react';
+import * as ReactDOM from 'react-dom/client'; // Use ReactDOM from 'react-dom/client' for React 18
 
 const containerElementName = 'faceLivenessReactContainer';
 
@@ -33,7 +32,8 @@ export class FaceLivenessReactWrapperComponent implements OnInit, OnChanges, OnD
     @Input() public sessionId = null;
     @Output() public livenessResults = new EventEmitter<any>();
     @Output() public livenessErrors = new EventEmitter<any>();
-    region = awsmobile['aws_project_region']
+    region = 'us-east-1';
+    private root: any; // To store the root object
 
     constructor() {
     }
@@ -51,7 +51,9 @@ export class FaceLivenessReactWrapperComponent implements OnInit, OnChanges, OnD
     }
 
     ngOnDestroy() {
-        ReactDOM.unmountComponentAtNode(this.containerRef.nativeElement);
+        if (this.root) {
+            this.root.unmount(); // Unmount the component using the new API
+        }
     }
 
     handleAnalysisComplete = async () => {
@@ -68,21 +70,32 @@ export class FaceLivenessReactWrapperComponent implements OnInit, OnChanges, OnD
     }
 
     handleError = async (err: any) => {
+        console.log(err)
         this.livenessErrors.emit(err);
     }
 
-
     private render() {
-        const { counter } = this;
+        // Use createRoot for React 18
+        if (!this.root) {
+            this.root = ReactDOM.createRoot(this.containerRef.nativeElement); // Create the root object once
+        }
 
-        ReactDOM.render(
+        console.log(AWS.config.credentials)
+        
+        this.root.render(
             <React.StrictMode>
                 <div>
-                    <FaceLivenessDetector sessionId={this.sessionId} region={this.region} onAnalysisComplete={this.handleAnalysisComplete} 
-                    onError={this.handleError}
+                    <FaceLivenessDetector
+                        sessionId={this.sessionId} 
+                        region={this.region} 
+                        onAnalysisComplete={this.handleAnalysisComplete}
+                        config={{
+                            credentialProvider: () => { return AWS.config.credentials }
+                        } as any }
+                        onError={this.handleError}
                     />
                 </div>
             </React.StrictMode>
-            , this.containerRef.nativeElement);
+        );
     }
 }

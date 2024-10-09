@@ -8,6 +8,7 @@ import { FaceLivenessComponent } from './face-liveness/face-liveness.component';
 import { FaceLivenessReactWrapperComponent } from 'src/FaceLivenessReactWrapperComponent';
 import { AmplifyAuthenticatorModule } from '@aws-amplify/ui-angular';
 import {MatIconModule} from '@angular/material/icon';
+import { HttpClientModule } from '@angular/common/http';
 
 
 @NgModule({
@@ -20,6 +21,7 @@ import {MatIconModule} from '@angular/material/icon';
     BrowserModule,
     AppRoutingModule,
     BrowserAnimationsModule,
+    HttpClientModule,
     MatGridListModule,
     AmplifyAuthenticatorModule,
     MatIconModule
